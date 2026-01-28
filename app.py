@@ -130,10 +130,14 @@ with tab3:
     with st.form("add_session_form"):
         date = st.date_input("Date", value=datetime.today())
         host_team_name = st.selectbox("Host Team", [t['name'] for t in teams])
-        host_team = next(t for t in teams if t['name'] == host_team_name)
-        presenter = st.selectbox("Presenter", host_team['members'])
+        host_team = next((t for t in teams if t['name'] == host_team_name), None)
+        if host_team is None:
+            st.error("Selected team not found!")
+            presenter = None
+        else:
+            presenter = st.selectbox("Presenter", host_team['members'])
         submitted = st.form_submit_button("Add Session")
-        if submitted:
+        if submitted and host_team is not None:
             new_session = {
                 'id': (max([s['id'] for s in sessions]) + 1) if sessions else 1,
                 'date': date.strftime("%Y-%m-%d"),
@@ -156,9 +160,11 @@ with tab4:
     else:
         which = st.selectbox("Select Session", [f"#{s['id']} • {s['date']} • {s['hostTeam']}" for s in sessions])
         session_id = int(which.split('•')[0].strip().replace('#', ''))
-        session = next(s for s in sessions if s['id'] == session_id)
-
-        colA, colB = st.columns(2, gap="large")
+        session = next((s for s in sessions if s['id'] == session_id), None)
+        
+        if session is None:
+            st.error("Selected session not found!")
+        else:
 
         # Attendance
         with colA:

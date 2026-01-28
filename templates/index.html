@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Building Activity Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+    <div id="app" class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-6">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <h1 class="text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                    Team Building Activity Tracker
+                </h1>
+                <p class="text-gray-300">Bi-weekly Hallway Sessions</p>
+            </div>
+
+            <!-- Leaderboard -->
+            <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8 shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-bold flex items-center gap-2">
+                        <i data-lucide="trophy" class="text-yellow-400 w-8 h-8"></i>
+                        Leaderboard
+                    </h2>
+                    <button id="editTeamsBtn" class="flex items-center gap-2 px-4 py-2 bg-white/20 rounded-lg hover:bg-white/30 transition">
+                        <i data-lucide="edit-2" class="w-5 h-5"></i>
+                        <span>Edit Teams</span>
+                    </button>
+                </div>
+                <div id="leaderboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Add Session Button -->
+            <div class="mb-6">
+                <button id="addSessionBtn" class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl hover:from-blue-600 hover:to-purple-600 transition shadow-lg">
+                    <i data-lucide="plus" class="w-5 h-5"></i>
+                    Add New Session
+                </button>
+            </div>
+
+            <!-- Add Session Form -->
+            <div id="addSessionForm" class="hidden bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8 shadow-2xl">
+                <h3 class="text-2xl font-bold mb-4">New Session</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm mb-2">Date</label>
+                        <input id="sessionDate" type="date" class="w-full px-4 py-2 bg-white/20 rounded-lg border border-white/30 focus:outline-none focus:border-blue-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-2">Host Team</label>
+                        <select id="sessionHostTeam" class="w-full px-4 py-2 bg-white/20 rounded-lg border border-white/30 focus:outline-none focus:border-blue-400 text-white" style="color: white;">
+                            <option value="" style="background-color: #1e293b; color: white;">Select Team</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-2">Presenter</label>
+                        <select id="sessionPresenter" class="w-full px-4 py-2 bg-white/20 rounded-lg border border-white/30 focus:outline-none focus:border-blue-400 text-white" style="color: white;" disabled>
+                            <option value="" style="background-color: #1e293b; color: white;">Select Presenter</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <button id="createSessionBtn" class="flex items-center gap-2 px-6 py-2 bg-green-500 rounded-lg hover:bg-green-600 transition">
+                        <i data-lucide="save" class="w-5 h-5"></i>
+                        Create Session
+                    </button>
+                    <button id="cancelSessionBtn" class="px-6 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sessions -->
+            <div id="sessionsList" class="space-y-6">
+                <!-- Populated by JavaScript -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="text-center py-12 text-gray-400">
+                <i data-lucide="calendar" class="w-16 h-16 mx-auto mb-4 opacity-50"></i>
+                <p class="text-xl">No sessions yet. Add your first session to start tracking!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Teams Modal -->
+    <div id="editTeamsModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-slate-800 rounded-2xl p-8 max-w-2xl w-full max-h-96 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Edit Teams</h2>
+            <div id="editTeamsContent" class="space-y-4">
+                <!-- Populated by JavaScript -->
+            </div>
+            <div class="mt-6 flex gap-4 justify-end">
+                <button id="closeEditTeamsBtn" class="px-6 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let teamsData = [];
+        let sessionsData = [];
+
+        // Fetch initial data
+        async function loadData() {
+            try {
+                const [teamsRes, sessionsRes] = await Promise.all([
+                    fetch('/api/teams'),
+                    fetch('/api/sessions')
+                ]);
+                teamsData = await teamsRes.json();
+                sessionsData = await sessionsRes.json();
+                renderLeaderboard();
+                renderSessions();
+                populateTeamSelects();
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        function calculateTeamScores() {
+            const scores = {};
+            teamsData.forEach(team => scores[team.id] = 0);
+
+            sessionsData.forEach(session => {
+                // Attendance
+                Object.entries(session.attendance || {}).forEach(([member, present]) => {
+                    if (present) {
+                        const team = teamsData.find(t => t.members.includes(member));
+                        if (team) scores[team.id] += 5;
+                    }
+                });
+
+                // Presentations
+                const hostTeam = teamsData.find(t => t.name === session.hostTeam);
+                if (hostTeam && session.presentationScores) {
+                    const total = Object.values(session.presentationScores).reduce((sum, score) => sum + parseInt(score || 0), 0);
+                    scores[hostTeam.id] += total;
+                }
+
+                // Games
+                session.games.forEach(game => {
+                    if (game.winner) {
+                        if (game.type === 'team') {
+                            scores[parseInt(game.winner)] = (scores[parseInt(game.winner)] || 0) + 10;
+                        } else {
+                            const team = teamsData.find(t => t.members.includes(game.winner));
+                            if (team) scores[team.id] += 5;
+                        }
+                    }
+                });
+
+                // Hosting
+                if (hostTeam && session.hostingScores) {
+                    const total = Object.values(session.hostingScores).reduce((sum, score) => sum + parseInt(score || 0), 0);
+                    scores[hostTeam.id] += total;
+                }
+            });
+
+            return scores;
+        }
+
+        function renderLeaderboard() {
+            const scores = calculateTeamScores();
+            const sortedTeams = [...teamsData].sort((a, b) => scores[b.id] - scores[a.id]);
+            const leaderboard = document.getElementById('leaderboard');
+            
+            leaderboard.innerHTML = sortedTeams.map((team, index) => `
+                <div class="${team.color} bg-opacity-20 backdrop-blur-sm rounded-xl p-4 border-2 border-white/20">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="${team.color} w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                                ${index + 1}
+                            </div>
+                            <h3 class="text-xl font-bold">${team.name}</h3>
+                        </div>
+                        <div class="text-2xl font-bold">${scores[team.id]}</div>
+                    </div>
+                    <div class="space-y-1">
+                        ${team.members.map(member => `
+                            <div class="flex items-center justify-between text-sm bg-black/20 rounded px-2 py-1">
+                                <span>${member}</span>
+                                <button class="text-red-400 hover:text-red-300 removeMemberBtn" data-team-id="${team.id}" data-member="${member}">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                        <button class="w-full flex items-center justify-center gap-1 text-sm bg-white/20 rounded px-2 py-1 hover:bg-white/30 transition addMemberBtn" data-team-id="${team.id}">
+                            <i data-lucide="user-plus" class="w-4 h-4"></i>
+                            Add Member
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+            attachLeaderboardEventListeners();
+        }
+
+        function renderSessions() {
+            const sessionsList = document.getElementById('sessionsList');
+            const emptyState = document.getElementById('emptyState');
+            const scores = calculateTeamScores();
+
+            if (sessionsData.length === 0) {
+                sessionsList.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            const sorted = [...sessionsData].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            sessionsList.innerHTML = sorted.map(session => `
+                <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-6 shadow-2xl" data-session-id="${session.id}">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 class="text-2xl font-bold flex items-center gap-2">
+                                <i data-lucide="calendar" class="text-blue-400 w-6 h-6"></i>
+                                ${new Date(session.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            </h3>
+                            <p class="text-gray-300">Hosted by: ${session.hostTeam}</p>
+                        </div>
+                        <button class="px-4 py-2 bg-red-500/80 rounded-lg hover:bg-red-600 transition flex items-center gap-2 deleteSessionBtn" data-session-id="${session.id}">
+                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                            Delete
+                        </button>
+                    </div>
+
+                    <!-- Attendance -->
+                    <div class="mb-6">
+                        <h4 class="text-xl font-semibold mb-3 flex items-center gap-2">
+                            <i data-lucide="users" class="text-green-400 w-5 h-5"></i>
+                            Attendance (5 points each)
+                        </h4>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            ${teamsData.flatMap(t => t.members).map(member => `
+                                <label class="flex items-center gap-2 bg-white/10 p-3 rounded-lg cursor-pointer hover:bg-white/20 transition">
+                                    <input type="checkbox" class="w-5 h-5 attendanceCheckbox" data-session-id="${session.id}" data-member="${member}" ${session.attendance[member] ? 'checked' : ''}>
+                                    <span class="text-sm">${member}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Presentations -->
+                    <div class="mb-6">
+                        <h4 class="text-xl font-semibold mb-3 flex items-center gap-2">
+                            <i data-lucide="award" class="text-purple-400 w-5 h-5"></i>
+                            Presentation Score (5 points × 3 teams = 15 points max)
+                        </h4>
+                        <div class="bg-white/10 p-4 rounded-lg">
+                            <div class="mb-3 text-lg">
+                                <span class="font-semibold">Presenter: </span>
+                                <span class="text-blue-300">${session.presenter}</span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                ${teamsData.filter(t => t.name !== session.hostTeam).map(team => `
+                                    <div>
+                                        <label class="block text-sm mb-1 font-semibold">${team.name} Score</label>
+                                        <input type="number" min="0" max="5" class="w-full px-3 py-2 bg-white/20 rounded border border-white/30 focus:outline-none focus:border-blue-400 presentationInput" data-session-id="${session.id}" data-team-id="${team.id}" value="${session.presentationScores?.[team.id] || ''}" placeholder="0-5">
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="mt-3 text-right">
+                                <span class="text-sm text-gray-300">Total Score: </span>
+                                <span class="text-xl font-bold text-green-400">
+                                    ${Object.values(session.presentationScores || {}).reduce((sum, score) => sum + parseInt(score || 0), 0)} / 15
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Games -->
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="text-xl font-semibold flex items-center gap-2">
+                                <i data-lucide="trophy" class="text-yellow-400 w-5 h-5"></i>
+                                Games
+                            </h4>
+                            <button class="px-4 py-2 bg-blue-500 rounded-lg hover:bg-blue-600 transition text-sm addGameBtn" data-session-id="${session.id}">
+                                Add Game
+                            </button>
+                        </div>
+                        <div class="space-y-3">
+                            ${session.games.map(game => `
+                                <div class="bg-white/10 p-4 rounded-lg grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input type="text" placeholder="Game name" value="${game.name}" class="px-3 py-2 bg-white/20 rounded border border-white/30 focus:outline-none focus:border-blue-400 gameNameInput" data-session-id="${session.id}" data-game-id="${game.id}">
+                                    <select class="px-3 py-2 bg-white/20 rounded border border-white/30 focus:outline-none focus:border-blue-400 text-white gameTypeInput" data-session-id="${session.id}" data-game-id="${game.id}" style="color: white;">
+                                        <option value="team" style="background-color: #1e293b; color: white;" ${game.type === 'team' ? 'selected' : ''}>Team Game (10 pts)</option>
+                                        <option value="individual" style="background-color: #1e293b; color: white;" ${game.type === 'individual' ? 'selected' : ''}>Individual (5 pts)</option>
+                                    </select>
+                                    <select class="px-3 py-2 bg-white/20 rounded border border-white/30 focus:outline-none focus:border-blue-400 text-white gameWinnerInput" data-session-id="${session.id}" data-game-id="${game.id}" style="color: white;">
+                                        <option value="" style="background-color: #1e293b; color: white;">Select Winner</option>
+                                        ${game.type === 'team' ? teamsData.map(t => `<option value="${t.id}" style="background-color: #1e293b; color: white;" ${game.winner == t.id ? 'selected' : ''}>${t.name}</option>`).join('') : teamsData.flatMap(t => t.members).map(member => `<option value="${member}" style="background-color: #1e293b; color: white;" ${game.winner === member ? 'selected' : ''}>${member}</option>`).join('')}
+                                    </select>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Hosting Score -->
+                    <div>
+                        <h4 class="text-xl font-semibold mb-3 flex items-center gap-2">
+                            <i data-lucide="award" class="text-pink-400 w-5 h-5"></i>
+                            Overall Hosting Score (5 points × 3 teams = 15 points max)
+                        </h4>
+                        <div class="bg-white/10 p-4 rounded-lg">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                ${teamsData.filter(t => t.name !== session.hostTeam).map(team => `
+                                    <div>
+                                        <label class="block text-sm mb-1 font-semibold">${team.name} Score</label>
+                                        <input type="number" min="0" max="5" class="w-full px-3 py-2 bg-white/20 rounded border border-white/30 focus:outline-none focus:border-blue-400 hostingInput" data-session-id="${session.id}" data-team-id="${team.id}" value="${session.hostingScores?.[team.id] || ''}" placeholder="0-5">
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="mt-3 text-right">
+                                <span class="text-sm text-gray-300">Total Score: </span>
+                                <span class="text-xl font-bold text-green-400">
+                                    ${Object.values(session.hostingScores || {}).reduce((sum, score) => sum + parseInt(score || 0), 0)} / 15
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+            attachSessionEventListeners();
+        }
+
+        function attachLeaderboardEventListeners() {
+            document.querySelectorAll('.addMemberBtn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const teamId = parseInt(btn.dataset.teamId);
+                    const name = prompt('Enter member name:');
+                    if (name) {
+                        const team = teamsData.find(t => t.id === teamId);
+                        if (team && !team.members.includes(name)) {
+                            team.members.push(name);
+                            saveTeams();
+                            renderLeaderboard();
+                            renderSessions();
+                        }
+                    }
+                });
+            });
+
+            document.querySelectorAll('.removeMemberBtn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const teamId = parseInt(btn.dataset.teamId);
+                    const member = btn.dataset.member;
+                    if (confirm(`Remove ${member} from the team?`)) {
+                        const team = teamsData.find(t => t.id === teamId);
+                        if (team) {
+                            team.members = team.members.filter(m => m !== member);
+                            saveTeams();
+                            renderLeaderboard();
+                            renderSessions();
+                        }
+                    }
+                });
+            });
+        }
+
+        function attachSessionEventListeners() {
+            // Attendance checkboxes
+            document.querySelectorAll('.attendanceCheckbox').forEach(checkbox => {
+                checkbox.addEventListener('change', async () => {
+                    const sessionId = parseInt(checkbox.dataset.sessionId);
+                    const member = checkbox.dataset.member;
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        session.attendance[member] = checkbox.checked;
+                        await updateSession(session);
+                    }
+                });
+            });
+
+            // Presentation inputs
+            document.querySelectorAll('.presentationInput').forEach(input => {
+                input.addEventListener('change', async () => {
+                    const sessionId = parseInt(input.dataset.sessionId);
+                    const teamId = input.dataset.teamId;
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        session.presentationScores = session.presentationScores || {};
+                        session.presentationScores[teamId] = input.value || 0;
+                        await updateSession(session);
+                    }
+                });
+            });
+
+            // Hosting inputs
+            document.querySelectorAll('.hostingInput').forEach(input => {
+                input.addEventListener('change', async () => {
+                    const sessionId = parseInt(input.dataset.sessionId);
+                    const teamId = input.dataset.teamId;
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        session.hostingScores = session.hostingScores || {};
+                        session.hostingScores[teamId] = input.value || 0;
+                        await updateSession(session);
+                    }
+                });
+            });
+
+            // Game inputs
+            document.querySelectorAll('.gameNameInput').forEach(input => {
+                input.addEventListener('change', async () => {
+                    const sessionId = parseInt(input.dataset.sessionId);
+                    const gameId = input.dataset.gameId;
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        const game = session.games.find(g => g.id == gameId);
+                        if (game) {
+                            game.name = input.value;
+                            await updateSession(session);
+                        }
+                    }
+                });
+            });
+
+            document.querySelectorAll('.gameTypeInput').forEach(input => {
+                input.addEventListener('change', async () => {
+                    const sessionId = parseInt(input.dataset.sessionId);
+                    const gameId = input.dataset.gameId;
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        const game = session.games.find(g => g.id == gameId);
+                        if (game) {
+                            game.type = input.value;
+                            game.winner = '';
+                            await updateSession(session);
+                            renderSessions();
+                        }
+                    }
+                });
+            });
+
+            document.querySelectorAll('.gameWinnerInput').forEach(input => {
+                input.addEventListener('change', async () => {
+                    const sessionId = parseInt(input.dataset.sessionId);
+                    const gameId = input.dataset.gameId;
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        const game = session.games.find(g => g.id == gameId);
+                        if (game) {
+                            game.winner = input.value;
+                            await updateSession(session);
+                            renderLeaderboard();
+                        }
+                    }
+                });
+            });
+
+            // Add game button
+            document.querySelectorAll('.addGameBtn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const sessionId = parseInt(btn.dataset.sessionId);
+                    const session = sessionsData.find(s => s.id === sessionId);
+                    if (session) {
+                        session.games = session.games || [];
+                        session.games.push({ id: Date.now(), name: '', type: 'team', winner: '' });
+                        await updateSession(session);
+                        renderSessions();
+                    }
+                });
+            });
+
+            // Delete session button
+            document.querySelectorAll('.deleteSessionBtn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const sessionId = parseInt(btn.dataset.sessionId);
+                    if (confirm('Delete this session?')) {
+                        await deleteSession(sessionId);
+                        await loadData();
+                    }
+                });
+            });
+        }
+
+        function populateTeamSelects() {
+            const hostTeamSelect = document.getElementById('sessionHostTeam');
+            hostTeamSelect.innerHTML = '<option value="" style="background-color: #1e293b; color: white;">Select Team</option>';
+            teamsData.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.name;
+                option.textContent = team.name;
+                option.style.backgroundColor = '#1e293b';
+                option.style.color = 'white';
+                hostTeamSelect.appendChild(option);
+            });
+
+            hostTeamSelect.addEventListener('change', () => {
+                const presenterSelect = document.getElementById('sessionPresenter');
+                presenterSelect.innerHTML = '<option value="" style="background-color: #1e293b; color: white;">Select Presenter</option>';
+                
+                if (hostTeamSelect.value) {
+                    const team = teamsData.find(t => t.name === hostTeamSelect.value);
+                    if (team) {
+                        presenterSelect.disabled = false;
+                        team.members.forEach(member => {
+                            const option = document.createElement('option');
+                            option.value = member;
+                            option.textContent = member;
+                            option.style.backgroundColor = '#1e293b';
+                            option.style.color = 'white';
+                            presenterSelect.appendChild(option);
+                        });
+                    }
+                } else {
+                    presenterSelect.disabled = true;
+                }
+            });
+        }
+
+        // API calls
+        async function updateSession(session) {
+            try {
+                await fetch(`/api/sessions/${session.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(session)
+                });
+            } catch (error) {
+                console.error('Error updating session:', error);
+            }
+        }
+
+        async function deleteSession(sessionId) {
+            try {
+                await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+            } catch (error) {
+                console.error('Error deleting session:', error);
+            }
+        }
+
+        async function saveTeams() {
+            try {
+                await fetch('/api/teams', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(teamsData)
+                });
+            } catch (error) {
+                console.error('Error saving teams:', error);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('addSessionBtn').addEventListener('click', () => {
+            document.getElementById('addSessionForm').classList.toggle('hidden');
+            if (!document.getElementById('addSessionForm').classList.contains('hidden')) {
+                document.getElementById('sessionDate').focus();
+            }
+        });
+
+        document.getElementById('cancelSessionBtn').addEventListener('click', () => {
+            document.getElementById('addSessionForm').classList.add('hidden');
+            document.getElementById('sessionDate').value = '';
+            document.getElementById('sessionHostTeam').value = '';
+            document.getElementById('sessionPresenter').value = '';
+        });
+
+        document.getElementById('createSessionBtn').addEventListener('click', async () => {
+            const date = document.getElementById('sessionDate').value;
+            const hostTeam = document.getElementById('sessionHostTeam').value;
+            const presenter = document.getElementById('sessionPresenter').value;
+
+            if (!date || !hostTeam || !presenter) {
+                alert('Please fill in date, host team, and presenter');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, hostTeam, presenter })
+                });
+                
+                if (res.ok) {
+                    document.getElementById('addSessionForm').classList.add('hidden');
+                    document.getElementById('sessionDate').value = '';
+                    document.getElementById('sessionHostTeam').value = '';
+                    document.getElementById('sessionPresenter').value = '';
+                    await loadData();
+                }
+            } catch (error) {
+                console.error('Error creating session:', error);
+            }
+        });
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+</html>

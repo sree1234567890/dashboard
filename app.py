@@ -1,62 +1,52 @@
+from flask import Flask, render_template, request, jsonify
 import json
 import os
 from datetime import datetime
-import streamlit as st
-import pandas as pd
 
-DATA_FILE = "team_tracker_data.json"
+app = Flask(__name__)
 
-DEFAULT_TEAMS = [
-    {'id': 1, 'name': 'Group 1', 'color': 'Blue', 'members': [
-        'Sreejith Sreekumar', 'Vishal Anbuselvi Sharavanan', 'Ajesh Raj', 'Sreerag Sasikumar', 'Navya Nair'
-    ]},
-    {'id': 2, 'name': 'Group 2', 'color': 'Green', 'members': [
-        'Emerson Johnson', 'Anagha Rajasree', 'Alfin Joji', 'Joel Ivan', 'Lubina Anwer'
-    ]},
-    {'id': 3, 'name': 'Group 3', 'color': 'Purple', 'members': [
-        'Gokulraj Rajan', 'Desma Davis', 'Rahul Rajendran', 'Arya Sarang'
-    ]},
-    {'id': 4, 'name': 'Group 4', 'color': 'Orange', 'members': [
-        'Geethu Sherly Satheesh', 'Thara Rani', 'Amritha Ramesh', 'Arsha Sajeev'
-    ]},
-]
+DATA_FILE = "team_tracker_web.json"
+
+DEFAULT_DATA = {
+    "teams": [
+        {"id": 1, "name": "Group 1", "color": "bg-blue-500", "members": ["Sreejith Sreekumar", "Vishal Anbuselvi Sharavanan", "Ajesh Raj", "Sreerag Sasikumar", "Navya Nair"]},
+        {"id": 2, "name": "Group 2", "color": "bg-green-500", "members": ["Emerson Johnson", "Anagha Rajasree", "Alfin Joji", "Joel Ivan", "Lubina Anwer"]},
+        {"id": 3, "name": "Group 3", "color": "bg-purple-500", "members": ["Gokulraj Rajan", "Desma Davis", "Rahul Rajendran", "Arya Sarang"]},
+        {"id": 4, "name": "Group 4", "color": "bg-orange-500", "members": ["Geethu Sherly Satheesh", "Thara Rani", "Amritha Ramesh", "Arsha Sajeev"]}
+    ],
+    "sessions": []
+}
 
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r') as f:
-                data = json.load(f)
-                teams = data.get('teams', DEFAULT_TEAMS)
-                sessions = data.get('sessions', [])
-                return teams, sessions
-        except Exception as e:
-            st.warning(f"Error loading data: {e}")
-    return DEFAULT_TEAMS, []
+                return json.load(f)
+        except:
+            return DEFAULT_DATA
+    return DEFAULT_DATA
 
-def save_data(teams, sessions):
-    try:
-        with open(DATA_FILE, 'w') as f:
-            json.dump({'teams': teams, 'sessions': sessions}, f, indent=2)
-        st.toast("Data saved", icon="✅")
-    except Exception as e:
-        st.error(f"Error saving data: {e}")
+def save_data(data):
+    with open(DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
 
-def calculate_team_scores(teams, sessions):
-    scores = {team['id']: 0 for team in teams}
-    for session in sessions:
-        # Attendance (5 per present member)
+def calculate_team_scores(data):
+    scores = {team['id']: 0 for team in data['teams']}
+    
+    for session in data['sessions']:
+        # Attendance (5 points per present member)
         for member, present in session.get('attendance', {}).items():
             if present:
-                team = next((t for t in teams if member in t['members']), None)
+                team = next((t for t in data['teams'] if member in t['members']), None)
                 if team:
                     scores[team['id']] += 5
-
-        # Presentation
-        host_team = next((t for t in teams if t['name'] == session.get('hostTeam')), None)
-        if host_team:
-            presentation_total = sum(session.get('presentationScores', {}).values())
-            scores[host_team['id']] += presentation_total
-
+        
+        # Presentations
+        host_team = next((t for t in data['teams'] if t['name'] == session.get('hostTeam')), None)
+        if host_team and session.get('presentationScores'):
+            total = sum(int(v) for v in session['presentationScores'].values())
+            scores[host_team['id']] += total
+        
         # Games
         for game in session.get('games', []):
             if game.get('winner'):
@@ -64,202 +54,85 @@ def calculate_team_scores(teams, sessions):
                     team_id = int(game['winner'])
                     scores[team_id] += 10
                 else:
-                    team = next((t for t in teams if game['winner'] in t['members']), None)
+                    team = next((t for t in data['teams'] if game['winner'] in t['members']), None)
                     if team:
                         scores[team['id']] += 5
-
+        
         # Hosting
-        if host_team:
-            hosting_total = sum(session.get('hostingScores', {}).values())
-            scores[host_team['id']] += hosting_total
+        if host_team and session.get('hostingScores'):
+            total = sum(int(v) for v in session['hostingScores'].values())
+            scores[host_team['id']] += total
+    
     return scores
 
-def session_table(sessions):
-    if not sessions:
-        return pd.DataFrame(columns=["id", "date", "hostTeam", "presenter", "attendanceCount", "presentationScore", "hostingScore", "games"])
-    rows = []
-    for s in sessions:
-        rows.append({
-            "id": s["id"],
-            "date": s["date"],
-            "hostTeam": s["hostTeam"],
-            "presenter": s["presenter"],
-            "attendanceCount": sum(1 for v in s.get("attendance", {}).values() if v),
-            "presentationScore": sum(s.get("presentationScores", {}).values()),
-            "hostingScore": sum(s.get("hostingScores", {}).values()),
-            "games": len(s.get("games", [])),
-        })
-    df = pd.DataFrame(rows).sort_values("date", ascending=False)
-    return df
+@app.route('/')
+def index():
+    data = load_data()
+    scores = calculate_team_scores(data)
+    sorted_teams = sorted(data['teams'], key=lambda t: scores[t['id']], reverse=True)
+    
+    return render_template('index.html', 
+                         teams=data['teams'],
+                         sorted_teams=sorted_teams,
+                         sessions=sorted(data['sessions'], key=lambda s: s['date'], reverse=True),
+                         scores=scores)
 
-# ============ Streamlit UI ============
+@app.route('/api/teams', methods=['GET'])
+def get_teams():
+    data = load_data()
+    return jsonify(data['teams'])
 
-st.set_page_config(page_title="Team Building Activity Tracker", page_icon="🏆", layout="wide")
-st.title("🏆 Team Building Activity Tracker")
+@app.route('/api/sessions', methods=['GET'])
+def get_sessions():
+    data = load_data()
+    return jsonify(data['sessions'])
 
-# Load once and keep in session_state for UX
-if "teams" not in st.session_state or "sessions" not in st.session_state:
-    teams, sessions = load_data()
-    st.session_state.teams = teams
-    st.session_state.sessions = sessions
+@app.route('/api/sessions', methods=['POST'])
+def create_session():
+    data = load_data()
+    session = request.json
+    session['id'] = int(datetime.now().timestamp() * 1000)
+    session['attendance'] = session.get('attendance', {})
+    session['presentationScores'] = session.get('presentationScores', {})
+    session['hostingScores'] = session.get('hostingScores', {})
+    session['games'] = session.get('games', [])
+    
+    data['sessions'].append(session)
+    save_data(data)
+    return jsonify(session), 201
 
-teams = st.session_state.teams
-sessions = st.session_state.sessions
+@app.route('/api/sessions/<int:session_id>', methods=['PUT'])
+def update_session(session_id):
+    data = load_data()
+    session = next((s for s in data['sessions'] if s['id'] == session_id), None)
+    
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+    
+    updates = request.json
+    session.update(updates)
+    save_data(data)
+    return jsonify(session)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Leaderboard", "Sessions", "Add Session", "Score & Attendance", "Data"
-])
+@app.route('/api/sessions/<int:session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    data = load_data()
+    data['sessions'] = [s for s in data['sessions'] if s['id'] != session_id]
+    save_data(data)
+    return jsonify({'success': True})
 
-with tab1:
-    st.subheader("Leaderboard")
-    scores = calculate_team_scores(teams, sessions)
-    leaderboard = sorted(teams, key=lambda t: scores[t['id']], reverse=True)
-    for i, team in enumerate(leaderboard, 1):
-        with st.container(border=True):
-            st.markdown(f"### {i}. {team['name']}  —  **{scores[team['id']]}** pts")
-            st.caption(f"Color: {team['color']}")
-            st.write("Members:", ", ".join(team['members']))
+@app.route('/api/teams', methods=['PUT'])
+def update_teams():
+    data = load_data()
+    data['teams'] = request.json
+    save_data(data)
+    return jsonify(data['teams'])
 
-with tab2:
-    st.subheader("All Sessions")
-    df = session_table(sessions)
-    st.dataframe(df, use_container_width=True)
+@app.route('/api/scores', methods=['GET'])
+def get_scores():
+    data = load_data()
+    scores = calculate_team_scores(data)
+    return jsonify(scores)
 
-with tab3:
-    st.subheader("Add New Session")
-    with st.form("add_session_form"):
-        date = st.date_input("Date", value=datetime.today())
-        host_team_name = st.selectbox("Host Team", [t['name'] for t in teams])
-        host_team = next((t for t in teams if t['name'] == host_team_name), None)
-        if host_team is None:
-            st.error("Selected team not found!")
-            presenter = None
-        else:
-            presenter = st.selectbox("Presenter", host_team['members'])
-        submitted = st.form_submit_button("Add Session")
-        if submitted and host_team is not None:
-            new_session = {
-                'id': (max([s['id'] for s in sessions]) + 1) if sessions else 1,
-                'date': date.strftime("%Y-%m-%d"),
-                'hostTeam': host_team['name'],
-                'presenter': presenter,
-                'attendance': {},
-                'presentationScores': {},
-                'games': [],
-                'hostingScores': {}
-            }
-            sessions.append(new_session)
-            st.session_state.sessions = sessions
-            save_data(teams, sessions)
-            st.success(f"Session added for {new_session['date']} (Host: {host_team_name})")
-
-with tab4:
-    st.subheader("Record Attendance / Scores / Games")
-    if not sessions:
-        st.info("No sessions yet. Add one in the 'Add Session' tab.")
-    else:
-        which = st.selectbox("Select Session", [f"#{s['id']} • {s['date']} • {s['hostTeam']}" for s in sessions])
-        session_id = int(which.split('•')[0].strip().replace('#', ''))
-        session = next((s for s in sessions if s['id'] == session_id), None)
-        
-        if session is None:
-            st.error("Selected session not found!")
-        else:
-            colA, colB = st.columns(2, gap="large")
-
-            # Attendance
-            with colA:
-                st.markdown("### Attendance")
-                all_members = [m for t in teams for m in t['members']]
-                for member in all_members:
-                    default = session.get('attendance', {}).get(member, False)
-                    present = st.checkbox(member, value=default, key=f"att_{session_id}_{member}")
-                    session.setdefault('attendance', {})[member] = present
-                if st.button("Save Attendance"):
-                    save_data(teams, sessions)
-
-            # Presentation & Hosting scores
-            with colB:
-                st.markdown(f"### Scores (Host: {session['hostTeam']})")
-                # Presentation - other teams rate host
-                st.write("**Presentation Scores (0–5 from other teams)**")
-                for team in teams:
-                    if team['name'] != session['hostTeam']:
-                        val = session.get('presentationScores', {}).get(str(team['id']), session.get('presentationScores', {}).get(team['id'], 0))
-                        score = st.number_input(
-                            f"Score from {team['name']}",
-                            min_value=0, max_value=5, step=1, value=int(val) if isinstance(val, int) else int(val or 0),
-                            key=f"pres_{session_id}_{team['id']}"
-                        )
-                        session.setdefault('presentationScores', {})[str(team['id'])] = int(score)
-                st.caption(f"Total presentation score: {sum([int(v) for v in session.get('presentationScores', {}).values()])}/15")
-
-                st.write("**Hosting Scores (0–5 from other teams)**")
-                for team in teams:
-                    if team['name'] != session['hostTeam']:
-                        val = session.get('hostingScores', {}).get(str(team['id']), session.get('hostingScores', {}).get(team['id'], 0))
-                        score = st.number_input(
-                            f"Hosting score from {team['name']}",
-                            min_value=0, max_value=5, step=1, value=int(val) if isinstance(val, int) else int(val or 0),
-                            key=f"host_{session_id}_{team['id']}"
-                        )
-                        session.setdefault('hostingScores', {})[str(team['id'])] = int(score)
-                st.caption(f"Total hosting score: {sum([int(v) for v in session.get('hostingScores', {}).values()])}/15")
-
-                st.markdown("### Games")
-                if 'games' not in session:
-                    session['games'] = []
-                with st.form(f"add_game_{session_id}"):
-                    game_name = st.text_input("Game name")
-                    game_type = st.selectbox("Game type", ["team", "individual"])
-                    if game_type == "team":
-                        winner_team = st.selectbox("Winning Team", [f"{t['id']} - {t['name']}" for t in teams])
-                        winner_value = winner_team.split(" - ")[0]
-                    else:
-                        all_members = [m for t in teams for m in t['members']]
-                        winner_value = st.selectbox("Winner (Member)", all_members)
-                    add_game = st.form_submit_button("Add Game")
-                    if add_game and game_name and winner_value:
-                        game = {
-                            'id': (max([g['id'] for g in session['games']]) + 1) if session['games'] else 1,
-                            'name': game_name,
-                            'type': game_type,
-                            'winner': winner_value
-                        }
-                        session['games'].append(game)
-                        save_data(teams, sessions)
-                        st.success("Game added")
-
-                if session['games']:
-                    st.write("Existing Games:")
-                    st.table(pd.DataFrame(session['games']))
-
-                if st.button("Save Scores & Games"):
-                    save_data(teams, sessions)
-
-with tab5:
-    st.subheader("Data Export / Import")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("**Export Current Data**")
-        export_obj = {'teams': teams, 'sessions': sessions}
-        st.download_button(
-            label="Download JSON",
-            file_name="team_tracker_export.json",
-            mime="application/json",
-            data=json.dumps(export_obj, indent=2)
-        )
-    with col2:
-        st.write("**Import Data**")
-        up = st.file_uploader("Upload a JSON export", type=["json"])
-        if up is not None:
-            try:
-                data = json.load(up)
-                st.session_state.teams = data.get('teams', teams)
-                st.session_state.sessions = data.get('sessions', sessions)
-                save_data(st.session_state.teams, st.session_state.sessions)
-                st.success("Imported data and saved to file.")
-            except Exception as e:
-                st.error(f"Invalid JSON: {e}")
-
-st.caption("Tip: For multi-user/long-term persistence, connect a hosted DB (e.g., Supabase Postgres).")
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)

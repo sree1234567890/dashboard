@@ -1,5 +1,2 @@
 streamlit
 pandas
-psycopg2-binary
-Flask==2.3.3
-Werkzeug==2.3.7

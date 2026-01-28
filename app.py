@@ -165,76 +165,77 @@ with tab4:
         if session is None:
             st.error("Selected session not found!")
         else:
+            colA, colB = st.columns(2, gap="large")
 
-        # Attendance
-        with colA:
-            st.markdown("### Attendance")
-            all_members = [m for t in teams for m in t['members']]
-            for member in all_members:
-                default = session.get('attendance', {}).get(member, False)
-                present = st.checkbox(member, value=default, key=f"att_{session_id}_{member}")
-                session.setdefault('attendance', {})[member] = present
-            if st.button("Save Attendance"):
-                save_data(teams, sessions)
-
-        # Presentation & Hosting scores
-        with colB:
-            st.markdown(f"### Scores (Host: {session['hostTeam']})")
-            # Presentation - other teams rate host
-            st.write("**Presentation Scores (0–5 from other teams)**")
-            for team in teams:
-                if team['name'] != session['hostTeam']:
-                    val = session.get('presentationScores', {}).get(str(team['id']), session.get('presentationScores', {}).get(team['id'], 0))
-                    score = st.number_input(
-                        f"Score from {team['name']}",
-                        min_value=0, max_value=5, step=1, value=int(val) if isinstance(val, int) else int(val or 0),
-                        key=f"pres_{session_id}_{team['id']}"
-                    )
-                    session.setdefault('presentationScores', {})[str(team['id'])] = int(score)
-            st.caption(f"Total presentation score: {sum([int(v) for v in session.get('presentationScores', {}).values()])}/15")
-
-            st.write("**Hosting Scores (0–5 from other teams)**")
-            for team in teams:
-                if team['name'] != session['hostTeam']:
-                    val = session.get('hostingScores', {}).get(str(team['id']), session.get('hostingScores', {}).get(team['id'], 0))
-                    score = st.number_input(
-                        f"Hosting score from {team['name']}",
-                        min_value=0, max_value=5, step=1, value=int(val) if isinstance(val, int) else int(val or 0),
-                        key=f"host_{session_id}_{team['id']}"
-                    )
-                    session.setdefault('hostingScores', {})[str(team['id'])] = int(score)
-            st.caption(f"Total hosting score: {sum([int(v) for v in session.get('hostingScores', {}).values()])}/15")
-
-            st.markdown("### Games")
-            if 'games' not in session:
-                session['games'] = []
-            with st.form(f"add_game_{session_id}"):
-                game_name = st.text_input("Game name")
-                game_type = st.selectbox("Game type", ["team", "individual"])
-                if game_type == "team":
-                    winner_team = st.selectbox("Winning Team", [f"{t['id']} - {t['name']}" for t in teams])
-                    winner_value = winner_team.split(" - ")[0]
-                else:
-                    all_members = [m for t in teams for m in t['members']]
-                    winner_value = st.selectbox("Winner (Member)", all_members)
-                add_game = st.form_submit_button("Add Game")
-                if add_game and game_name and winner_value:
-                    game = {
-                        'id': (max([g['id'] for g in session['games']]) + 1) if session['games'] else 1,
-                        'name': game_name,
-                        'type': game_type,
-                        'winner': winner_value
-                    }
-                    session['games'].append(game)
+            # Attendance
+            with colA:
+                st.markdown("### Attendance")
+                all_members = [m for t in teams for m in t['members']]
+                for member in all_members:
+                    default = session.get('attendance', {}).get(member, False)
+                    present = st.checkbox(member, value=default, key=f"att_{session_id}_{member}")
+                    session.setdefault('attendance', {})[member] = present
+                if st.button("Save Attendance"):
                     save_data(teams, sessions)
-                    st.success("Game added")
 
-            if session['games']:
-                st.write("Existing Games:")
-                st.table(pd.DataFrame(session['games']))
+            # Presentation & Hosting scores
+            with colB:
+                st.markdown(f"### Scores (Host: {session['hostTeam']})")
+                # Presentation - other teams rate host
+                st.write("**Presentation Scores (0–5 from other teams)**")
+                for team in teams:
+                    if team['name'] != session['hostTeam']:
+                        val = session.get('presentationScores', {}).get(str(team['id']), session.get('presentationScores', {}).get(team['id'], 0))
+                        score = st.number_input(
+                            f"Score from {team['name']}",
+                            min_value=0, max_value=5, step=1, value=int(val) if isinstance(val, int) else int(val or 0),
+                            key=f"pres_{session_id}_{team['id']}"
+                        )
+                        session.setdefault('presentationScores', {})[str(team['id'])] = int(score)
+                st.caption(f"Total presentation score: {sum([int(v) for v in session.get('presentationScores', {}).values()])}/15")
 
-            if st.button("Save Scores & Games"):
-                save_data(teams, sessions)
+                st.write("**Hosting Scores (0–5 from other teams)**")
+                for team in teams:
+                    if team['name'] != session['hostTeam']:
+                        val = session.get('hostingScores', {}).get(str(team['id']), session.get('hostingScores', {}).get(team['id'], 0))
+                        score = st.number_input(
+                            f"Hosting score from {team['name']}",
+                            min_value=0, max_value=5, step=1, value=int(val) if isinstance(val, int) else int(val or 0),
+                            key=f"host_{session_id}_{team['id']}"
+                        )
+                        session.setdefault('hostingScores', {})[str(team['id'])] = int(score)
+                st.caption(f"Total hosting score: {sum([int(v) for v in session.get('hostingScores', {}).values()])}/15")
+
+                st.markdown("### Games")
+                if 'games' not in session:
+                    session['games'] = []
+                with st.form(f"add_game_{session_id}"):
+                    game_name = st.text_input("Game name")
+                    game_type = st.selectbox("Game type", ["team", "individual"])
+                    if game_type == "team":
+                        winner_team = st.selectbox("Winning Team", [f"{t['id']} - {t['name']}" for t in teams])
+                        winner_value = winner_team.split(" - ")[0]
+                    else:
+                        all_members = [m for t in teams for m in t['members']]
+                        winner_value = st.selectbox("Winner (Member)", all_members)
+                    add_game = st.form_submit_button("Add Game")
+                    if add_game and game_name and winner_value:
+                        game = {
+                            'id': (max([g['id'] for g in session['games']]) + 1) if session['games'] else 1,
+                            'name': game_name,
+                            'type': game_type,
+                            'winner': winner_value
+                        }
+                        session['games'].append(game)
+                        save_data(teams, sessions)
+                        st.success("Game added")
+
+                if session['games']:
+                    st.write("Existing Games:")
+                    st.table(pd.DataFrame(session['games']))
+
+                if st.button("Save Scores & Games"):
+                    save_data(teams, sessions)
 
 with tab5:
     st.subheader("Data Export / Import")
